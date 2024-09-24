@@ -1,5 +1,7 @@
 Flask==3.0.3
-spacy==3.7.6
+# Spacy configuration below
+# spacy==3.7.6
+# en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz
+flair==0.14.0
 beautifulsoup4==4.12.3
 PyPDF2==3.0.1
-en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz
