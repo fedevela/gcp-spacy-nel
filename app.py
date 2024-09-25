@@ -12,8 +12,12 @@ from flair.data import Sentence
 from flask import Flask, request
 from io import BytesIO
 from PyPDF2 import PdfReader
+from flask_cors import CORS
 
 app = Flask(__name__)
+# Enable CORS
+# CORS(app)
+CORS(app, resources={r"/*": {"origins": "http://localhost:3000", "methods": ["GET", "POST", "OPTIONS"], "supports_credentials": True}})
 
 # Load the NER tagger
 flair_ner_tagger = SequenceTagger.load("ner")
@@ -23,12 +27,8 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 newlines_pattern = re.compile(r' *[\n|\r|\r\n]+ *')
 whitespace_pattern = re.compile(r'[\t\f\v ]+')
 paragraph_split_pattern = re.compile(r'\n')
-# Regex pattern to match DOIs
 doi_compiled_regex = re.compile(r'^10.\d{4,9}/[-._;()/:A-Z0-9]+$', re.IGNORECASE)
 
-sparql_url = "https://query.wikidata.org/sparql"
-
-# Map NER types to Wikidata types (QIDs)
 ner_type_to_wikidata_qid = {
     'PER': 'Q5',        # human
     'LOC': 'Q618123',   # geographical object
