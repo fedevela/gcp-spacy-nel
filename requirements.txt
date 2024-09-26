@@ -1,6 +1,9 @@
 bs4==0.0.2
-flair==0.14.0
+# flair==0.14.0
 flask==3.0.3
 Flask_Cors==5.0.0
 pypdf2==3.0.1
 requests==2.32.3
+spacy==3.7.6
+# scispacy==0.5.4
+en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.7.1/en_core_web_lg-3.7.1.tar.gz

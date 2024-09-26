@@ -1,18 +1,18 @@
 import logging
 import re
 import requests
-import requests
 import time
 import traceback
 import uuid
 
 from bs4 import BeautifulSoup
-from flair.models import SequenceTagger
-from flair.data import Sentence
+# from flair.models import SequenceTagger
+# from flair.data import Sentence
 from flask import Flask, request
+from flask_cors import CORS
 from io import BytesIO
 from PyPDF2 import PdfReader
-from flask_cors import CORS
+import spacy
 
 app = Flask(__name__)
 # Enable CORS
@@ -20,7 +20,8 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:3000", "methods": ["GET", "POST", "OPTIONS"], "supports_credentials": True}})
 
 # Load the NER tagger
-flair_ner_tagger = SequenceTagger.load("ner")
+# flair_ner_tagger = SequenceTagger.load("ner")
+nlp = spacy.load("en_core_web_lg")
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -29,11 +30,75 @@ whitespace_pattern = re.compile(r'[\t\f\v ]+')
 paragraph_split_pattern = re.compile(r'\n')
 doi_compiled_regex = re.compile(r'^10.\d{4,9}/[-._;()/:A-Z0-9]+$', re.IGNORECASE)
 
+# ner_type_to_wikidata_qid = {
+#     'PER': 'Q5',        # human
+#     'LOC': 'Q618123',   # geographical object
+#     'ORG': 'Q43229',    # organization
+# }
+
 ner_type_to_wikidata_qid = {
-    'PER': 'Q5',        # human
-    'LOC': 'Q618123',   # geographical object
-    'ORG': 'Q43229',    # organization
+    'PERSON': 'Q5',            # human
+    'NORP': 'Q2526255',        # ethnic group, religion, or political group
+    'FAC': 'Q13226383',        # facility (building, airport, bridge, etc.)
+    'ORG': 'Q43229',           # organization
+    'GPE': 'Q15617994',        # geographical region, political entities (countries, cities)
+    'LOC': 'Q618123',          # geographical object (mountains, bodies of water, etc.)
+    'PRODUCT': 'Q2424752',     # product
+    'EVENT': 'Q1656682',       # event
+    'WORK_OF_ART': 'Q838948',  # creative work (painting, book, movie, etc.)
+    'LAW': 'Q7748',            # law, legal document
+    'LANGUAGE': 'Q34770',      # language
+    'DATE': 'Q577',            # point in time (date)
+    'TIME': 'Q11471',          # time
+    'PERCENT': 'Q11229',       # percentage
+    'MONEY': 'Q1368',          # monetary value
+    'QUANTITY': 'Q2086',       # quantity
+    'ORDINAL': 'Q174789',      # ordinal number
+    'CARDINAL': 'Q21199',      # cardinal number
 }
+
+
+# Initialize the Flask app
+
+app = Flask(__name__)
+
+# Load the spaCy model with NEL
+nlp = spacy.load("en_core_web_lg")
+    
+# Regular expression for validating DOI
+doi_pattern = re.compile(r'^10.\d{4,9}/[-._;()/:A-Z0-9]+$', re.IGNORECASE)
+
+def perform_ner_with_text(sentence_text):
+    """
+    Performs Named Entity Recognition (NER) on the given text using Spacy.
+
+    Args:
+        sentence_text (str): The text to perform NER on.
+    
+    Returns:
+        list: A list of entities extracted from the text.
+    """
+    clean_abstract = clean_text(sentence_text)
+    
+    # Process the cleaned text with Spacy
+    logging.debug("Predicting NER tags with Spacy...")
+    doc = nlp(clean_abstract)
+    logging.debug("... done!!!")
+    
+    # Extract entities
+    entities = []
+    unique_entities = set()
+
+    for entity in doc.ents:
+        text_type_combo = (entity.text, entity.label_)
+        if text_type_combo not in unique_entities:
+            entities.append({
+                'text': entity.text,
+                'type': entity.label_,
+            })
+            unique_entities.add(text_type_combo)
+
+    return entities
 
 def clean_text(text):
     """
@@ -52,35 +117,36 @@ def clean_text(text):
     cleaned_paragraphs = [para for para in paragraphs if len(para.split()) > 5]
     return ' '.join(cleaned_paragraphs)
 
-def perform_ner_with_text(sentence_text):
-    """
-    Performs Named Entity Recognition (NER) on the given abstract using Flair.
+# def perform_ner_with_text(sentence_text):
+#     """
+#     Performs Named Entity Recognition (NER) on the given abstract using Flair.
 
-    Args:
-        sentence_text (str): The text to perform NER on.
+#     Args:
+#         sentence_text (str): The text to perform NER on.
     
-    Returns:
-        list: A list of entities extracted from the abstract.
-    """
-    clean_abstract = clean_text(sentence_text)
-    sentence = Sentence(clean_abstract)
-    logging.debug("Predicting NER tags...")
-    flair_ner_tagger.predict(sentence)
-    logging.debug("... done!!!")
-    # Extract entities
-    entities = []
-    unique_entities = set()
+#     Returns:
+#         list: A list of entities extracted from the abstract.
+#     """
+#     clean_abstract = clean_text(sentence_text)
+#     sentence = Sentence(clean_abstract)
+#     logging.debug("Predicting NER tags...")
+#     flair_ner_tagger.predict(sentence)
+#     logging.debug("... done!!!")
+#     # Extract entities
+#     entities = []
+#     unique_entities = set()
 
-    for entity in sentence.get_spans('ner'):
-        text_type_combo = (entity.text, entity.tag)
-        if text_type_combo not in unique_entities:
-            entities.append({
-                'text': entity.text,
-                'type': entity.tag,
-                'score': entity.score
-            })
-            unique_entities.add(text_type_combo)
-    return entities
+#     for entity in sentence.get_spans('ner'):
+#         text_type_combo = (entity.text, entity.tag)
+#         if text_type_combo not in unique_entities:
+#             entities.append({
+#                 'text': entity.text,
+#                 'type': entity.tag,
+#                 'score': entity.score
+#             })
+#             unique_entities.add(text_type_combo)
+#     return entities
+
 
 def query_wikidata(entity_text):
     """
@@ -140,11 +206,13 @@ def perform_nel(abstract):
             del entity['end_pos']
     
     # Filter out entities with score less than 0.87 and sort by score in descending order
-    filtered_sorted_entities = sorted(
-        [entity for entity in entities if entity['score'] >= 0.87],
-        key=lambda x: x['score'],
-        reverse=True
-    )[:100]# Limit to top 100 entities
+    # sorted(
+        # keep if length after removing pumctuation is greater than 3
+    filtered_sorted_entities = [entity for entity in entities if len(re.sub(r'\s+', ' ', re.sub(r'[^\w\s]', '', entity['text'])).strip()) >= 3]
+    #     key=lambda x: x['score'],
+    #     reverse=True
+    # )
+    # [:100]# Limit to top 100 entities
     linked_entities = []
     total_entities = len(filtered_sorted_entities)
     for index, entity in enumerate(filtered_sorted_entities):
@@ -153,6 +221,7 @@ def perform_nel(abstract):
         logging.debug(f"Progress: {progress:.2f}%")
         entity_text = entity['text']
         wikidata_response = query_wikidata(entity_text)
+        # logging.debug(f"wikidata_response: {wikidata_response}")
         if wikidata_response and 'search' in wikidata_response and len(wikidata_response['search']) > 0:
             top_match = wikidata_response['search'][0]
             entity['wikidata_id'] = top_match['id']
@@ -174,8 +243,8 @@ def extract_graph_nodes_and_links_from_paragraph(paragraph, source_url, is_doi=F
         'id': str(uuid.uuid4()),
         'text': source_url,
         'type': 'DOI' if is_doi else 'URL',
-        'score': 1.0,
-        #TODO: fix the statement below to include full paper wikidata info
+        # 'score': 1.0,
+        # TODO: fix the statement below to include full paper wikidata info
         'wikidata_id': None
     })
         
@@ -185,7 +254,7 @@ def extract_graph_nodes_and_links_from_paragraph(paragraph, source_url, is_doi=F
             'source': base_node['id'],
             'target': entity['id'],
             'type': 'MENTION',
-            'score': entity['score']
+            # 'score': entity['score']
         })
         
     # Add a new entity with the source_url
